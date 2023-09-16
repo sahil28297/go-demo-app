@@ -1,0 +1,167 @@
+---
+- name: Configure Vagrant Ubuntu VM
+  hosts: all
+  become: true
+  tasks:
+    - name: Set the hostname to demo-ops
+      hostname:
+        name: demo-ops
+      become: true
+
+    - name: Creating user demo with sudo access
+      user:
+        name: demo
+        password: "{{ 'super_secret_password' | password_hash('sha512', 'superstrongsalt') }}"
+        groups: sudo
+
+    - name: Disable Root Login
+      lineinfile:
+            dest: /etc/ssh/sshd_config
+            regexp: '^PermitRootLogin'
+            line: "PermitRootLogin no"
+            state: present
+            backup: yes
+      notify: Restart SSH
+
+    - name: Install ufw
+      apt: package=ufw state=present
+
+    - name: Configure ufw defaults
+      ufw: direction={{ item.direction }} policy={{ item.policy }}
+      with_items:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+      notify:
+        - restart ufw
+
+    - name: Configure ufw rules
+      ufw: rule={{ item.rule }} port={{ item.port }} proto={{ item.proto }}
+      with_items:
+        - { rule: 'limit', port: '{{ ssh_port | default("22") }}', proto: 'tcp' }
+        - { rule: 'allow', port: '80', proto: 'tcp' }
+        - { rule: 'allow', port: '443', proto: 'tcp' }
+      notify:
+        - restart ufw
+
+    - name: Enable ufw
+      ufw: state=enabled
+
+    - name: Set sysctl parameters
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - { name: "fs.file-max", value: 65535 }
+        - { name: "net.ipv4.tcp_syncookies", value: 1 }
+        - { name: "vm.swappiness", value: 80 }
+
+    - name: Set system timezone
+      timezone:
+        name: Asia/Kolkata
+
+    - name: Install aptitude
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Install required system packages
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu jammy stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
+        name:
+        - docker
+        - docker-compose
+
+    - name: Add demo user to docker group
+      user:
+        name: "demo"
+        groups: "docker"
+        append: yes
+
+    - name: Install docker-compose
+      remote_user: ubuntu
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.20.3/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x,g+x'
+
+    - name: Configure Docker Daemon
+      copy:
+        src: docker-daemon.json
+        dest: /etc/docker/daemon.json
+      notify: Restart Docker
+
+    - name: Create a directory if it does not exist
+      ansible.builtin.file:
+        path: /etc/demo-ops
+        state: directory
+        mode: '0755'
+
+    - name: copy Docker Compose files
+      copy:
+        src: "{{ playbook_dir }}/../docker/docker-compose.yaml"
+        dest: /etc/demo-ops/docker-compose.yaml
+      become: true
+
+    - name: deploy Docker Compose stack
+      community.docker.docker_compose:
+        project_src: /etc/demo-ops
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: sshd
+        state: restarted
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    - name: restart ufw
+      service:
+        name: ufw
+        state: restarted
+
+- name: Include Node Exporter Installer Playbook
+  ansible.builtin.import_playbook: node-exporter-installer.yaml
+
+- name: Include Redis Exporter Installer Playbook
+  ansible.builtin.import_playbook: redis-exporter-installer.yaml
+
+- name: Include Prometheus Installer Playbook
+  ansible.builtin.import_playbook: prometheus-installer.yaml
+
+- name: Include Grafana Installer Playbook
+  ansible.builtin.import_playbook: grafana-installer.yaml

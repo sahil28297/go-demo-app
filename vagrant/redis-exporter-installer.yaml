@@ -1,0 +1,59 @@
+---
+- name: Install and Configure Redis Exporter
+  hosts: all
+  become: true
+  tasks:
+    - name: Creating redis_exporter user group
+      group: name="redis_exporter"
+      become: true
+
+    - name: Creating redis_exporter user
+      user:
+        name: "redis_exporter"
+        group: "redis_exporter"
+        system: yes
+        shell: "/sbin/nologin"
+        comment: "redis_exporter nologin User"
+        createhome: "no"
+        state: present
+
+    - name: Install redis exporter
+      unarchive:
+        src: "https://github.com/oliver006/redis_exporter/releases/download/v1.54.0/redis_exporter-v1.54.0.linux-amd64.tar.gz"
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Copy redis exporter file to bin
+      copy:
+        src: "/tmp/redis_exporter-v1.54.0.linux-amd64/redis_exporter"
+        dest: "/usr/local/bin/redis_exporter"
+        owner: "redis_exporter"
+        group: "redis_exporter"
+        remote_src: yes
+        mode: 0755
+
+    - name: Delete redis exporter tmp folder
+      file:
+        path: '/tmp/redis_exporter-v1.54.0.linux-amd64'
+        state: absent
+
+    - name: Copy systemd init file
+      template:
+        src: redis-exporter-init.service.j2
+        dest: /etc/systemd/system/redis_exporter.service
+
+    - name: Start redis_exporter service
+      service:
+        name: redis_exporter
+        state: started
+        enabled: yes
+
+    - name: Check if redis exporter emits metrices
+      uri:
+        url: http://127.0.0.1:9121/metrics
+        method: GET
+        status_code: 200
+      register: __result
+      until: __result.status == 200
+      retries: 120
+      delay: 1
