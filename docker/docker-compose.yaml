@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    volumes:
+      - ./redis:/data
+    ports:
+      - "6379:6379"
+
+  app:
+    image: zerodha-demo-app:latest
+    container_name: app
+    ports:
+      - "8080:8080"
+    environment:
+      - DEMO_APP_ADDR=:8080
+      - DEMO_REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-conf:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
