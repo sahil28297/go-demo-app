@@ -1,0 +1,6 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: demo-ops
+  labels:
+    name: demo-ops
