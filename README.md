@@ -441,22 +441,35 @@ bash install_vagrant.sh
     - Creates a directory `/etc/demo-ops`.
     - Copy the docker compose files, uses a special ansible var `playbook_dir` which is the directory where the playbook is present.
     - Starts the `docker-compose.yaml` present in `/etc/demo-ops` directory.
-  - At the end of the main playbook, it imports 4 other playbooks to install
-    - `node-exporter-installer.yaml`: To install Node Exporter
+  - At the end of the main playbook, it imports 4 other playbooks:
+    ```
+    - name: Include Node Exporter Installer Playbook
+      ansible.builtin.import_playbook: node-exporter-installer.yaml
+
+    - name: Include Redis Exporter Installer Playbook
+      ansible.builtin.import_playbook: redis-exporter-installer.yaml
+
+    - name: Include Prometheus Installer Playbook
+      ansible.builtin.import_playbook: prometheus-installer.yaml
+
+    - name: Include Grafana Installer Playbook
+      ansible.builtin.import_playbook: grafana-installer.yaml
+    ```
+    - `node-exporter-installer.yaml`: To install Node Exporter.
       - Creates a user and group called `node_exporter`
       - Downloads and extracts Node Exporter v1.6.1 (latest at the time of writing)
       - Copies the extracted folder to bin
       - Generates `node_exporter.service` from template. This creates a service called `node_exporter`, which is run by user `node_exporter`
       - Starts the node exporter service
       - Wait till the service is up on `http://127.0.0.1:9100/metrics`
-    - `redis-exporter-installer.yaml`: To install Redis Exporter
+    - `redis-exporter-installer.yaml`: To install Redis Exporter.
       - Creates a user and group called `redis_exporter`
       - Downloads and extracts Redis Exporter v1.54.0 (latest at the time of writing)
       - Copies the extracted folder to bin
       - Generates `redis_exporter.service` from template. This creates a service called `redis_exporter`, which is run by user `redis_exporter`
       - Starts the redis exporter service
       - Wait till the service is up on `http://127.0.0.1:9121/metrics`
-    - `prometheus-installer.yaml`: To install Prometheus
+    - `prometheus-installer.yaml`: To install Prometheus.
       - Creates a user and group called `prometheus`
       - Downloads and extracts Prometheus v2.47.0 (latest at the time of writing)
       - Copies the extracted folder to bin
@@ -468,6 +481,13 @@ bash install_vagrant.sh
       - Generates `prometheus.service` from template. This creates a service called `prometheus`, which is run by user `prometheus`
       - Starts the prometheus service
       - Wait till the service is up on `http://localhost:9090`
+    - `grafana-installer.yaml`: To install Grafana.
+      - Installs gpg using `apt` ansible module.
+      - Adds grafana gpg key using `apt_key` ansible module.
+      - Adds grafana apt repository using `apt_repository` ansible module.
+      - Installs grafana using `apt`.
+      - Starts grafana service called `grafana-server` using `systemd`.
+      - Waits till the service is up on `http://127.0.0.1:3000`.
 
 Run The script using bash
 ```
